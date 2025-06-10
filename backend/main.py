@@ -4,7 +4,13 @@ import pandas as pd
 from thefuzz import fuzz
 import os
 
-app = FastAPI()
+# Create the FastAPI app
+app = FastAPI(
+    title="AI Reimbursement Agent API",
+    description="Fuzzy search for HRG, ICD-10, and OPCS codes"
+)
+
+# Allow frontend to connect (important!)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -12,8 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Point to your CSV files in backend/data/
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
+# Load all 3 datasets
 def load_data():
     return {
         "HRG Codes": pd.read_csv(f"{DATA_DIR}/hrg_codes.csv"),
@@ -21,6 +29,7 @@ def load_data():
         "OPCS Codes": pd.read_csv(f"{DATA_DIR}/opcs_codes.csv"),
     }
 
+# Fuzzy match your query to the datasets
 def search_data(query, threshold=80):
     datasets = load_data()
     result = {}
@@ -34,10 +43,19 @@ def search_data(query, threshold=80):
         result[name] = sorted(matches, key=lambda x: x["score"], reverse=True)[:5]
     return result
 
+# 👋 This is the welcome message to stop 404 errors
+@app.get("/")
+def read_root():
+    return {"message": "AI Reimbursement Agent API is running."}
+
+# 🔍 This is the search endpoint used by the frontend
 @app.post("/search")
 async def search(request: Request):
-    body = await request.json()
-    query = body.get("query", "")
-    if not query:
-        raise HTTPException(status_code=400, detail="Missing query")
-    return search_data(query)
+    try:
+        body = await request.json()
+        query = body.get("query", "")
+        if not query:
+            raise HTTPException(status_code=400, detail="Missing query")
+        return search_data(query)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
