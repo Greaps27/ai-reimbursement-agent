@@ -1,61 +1,64 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
-from thefuzz import fuzz
-import os
+from thefuzz import fuzz, process
+from pydantic import BaseModel
 
-# Create the FastAPI app
 app = FastAPI(
     title="AI Reimbursement Agent API",
-    description="Fuzzy search for HRG, ICD-10, and OPCS codes"
+    description="Fuzzy matching API for HRG, ICD-10, OPCS codes"
 )
 
-# Allow frontend to connect (important!)
+# ✅ CORS Setup
+origins = [
+    "http://localhost:5173",
+    "https://ai-reimbursement-agent.vercel.app",
+    "https://*.vercel.app"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Point to your CSV files in backend/data/
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-
-# Load all 3 datasets
+# ✅ Load data
 def load_data():
-    return {
-        "HRG Codes": pd.read_csv(f"{DATA_DIR}/hrg_codes.csv"),
-        "ICD-10 Codes": pd.read_csv(f"{DATA_DIR}/icd10_codes.csv"),
-        "OPCS Codes": pd.read_csv(f"{DATA_DIR}/opcs_codes.csv"),
-    }
+    hrg = pd.read_csv("data/hrg_codes.csv")
+    icd = pd.read_csv("data/icd10_codes.csv")
+    opcs = pd.read_csv("data/opcs_codes.csv")
+    return {"HRG Codes": hrg, "ICD-10 Codes": icd, "OPCS Codes": opcs}
 
-# Fuzzy match your query to the datasets
-def search_data(query, threshold=80):
+# ✅ Search logic
+def search_data(query: str, threshold=80):
     datasets = load_data()
-    result = {}
+    results = {}
     for name, df in datasets.items():
         matches = []
         for _, row in df.iterrows():
-            row_text = " | ".join(map(str, row.values))
+            row_text = " ".join(row.astype(str).values)
             score = fuzz.partial_ratio(query.lower(), row_text.lower())
             if score >= threshold:
                 matches.append({"score": score, "text": row_text})
-        result[name] = sorted(matches, key=lambda x: x["score"], reverse=True)[:5]
-    return result
+        results[name] = sorted(matches, key=lambda x: x["score"], reverse=True)[:5]
+    return results
 
-# 👋 This is the welcome message to stop 404 errors
+# ✅ Root route
 @app.get("/")
 def read_root():
-    return {"message": "AI Reimbursement Agent API is running."}
+    return {"message": "AI Reimbursement Agent API"}
 
-# 🔍 This is the search endpoint used by the frontend
+# ✅ POST /search
 @app.post("/search")
 async def search(request: Request):
     try:
         body = await request.json()
         query = body.get("query", "")
         if not query:
-            raise HTTPException(status_code=400, detail="Missing query")
-        return search_data(query)
+            raise HTTPException(status_code=400, detail="Query is required.")
+        results = search_data(query)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
