@@ -38,7 +38,8 @@ def search_data(query: str, threshold=80):
     for name, df in datasets.items():
         matches = []
         for _, row in df.iterrows():
-            row_text = " ".join(row.astype(str).values)
+            row_text = " | ".join([str(cell) if pd.notna(cell) else "" for cell in row.values])
+
             score = fuzz.partial_ratio(query.lower(), row_text.lower())
             if score >= threshold:
                 matches.append({"score": score, "text": row_text})
@@ -57,8 +58,8 @@ async def search(request: Request):
         body = await request.json()
         query = body.get("query", "")
         if not query:
-            raise HTTPException(status_code=400, detail="Query is required.")
-        results = search_data(query)
-        return results
+            raise HTTPException(status_code=400, detail="Missing query")
+        return search_data(query)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print("Search error:", str(e))  # 👈 Add this line
+        raise HTTPException(status_code=500, detail="Search error")
