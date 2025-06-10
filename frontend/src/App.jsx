@@ -1,38 +1,53 @@
 import { useState } from "react";
-import { searchQuery } from "./api";
 
 function App() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState({});
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleSearch = async () => {
-    const res = await searchQuery(query);
-    setResults(res);
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = await response.json();
+      setResults(data);
+    } catch (err) {
+      alert("Error searching. Please try again.");
+    }
+    setLoading(false);
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
       <h1>AI Reimbursement Agent</h1>
       <input
+        type="text"
+        placeholder="Enter diagnosis or treatment..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Enter your query"
-        style={{ width: "300px", padding: "8px" }}
+        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+        style={{ padding: "10px", width: "300px" }}
       />
-      <button onClick={handleSearch} style={{ marginLeft: "1rem" }}>Search</button>
+      <button onClick={handleSearch} style={{ marginLeft: "10px", padding: "10px" }}>
+        Search
+      </button>
 
-      {Object.entries(results).map(([name, items]) => (
-        <div key={name} style={{ marginTop: "2rem" }}>
-          <h2>{name}</h2>
-          {items.length === 0 && <p>No matches found.</p>}
-          {items.map((item, i) => (
-            <div key={i}>
-              <strong>Score:</strong> {item.score}
-              <pre>{item.text}</pre>
-            </div>
-          ))}
-        </div>
-      ))}
+      {loading && <p>Loading...</p>}
+      {results &&
+        Object.entries(results).map(([name, matches]) => (
+          <div key={name} style={{ marginTop: "20px" }}>
+            <h3>{name}</h3>
+            <ul>
+              {matches.map((m, i) => (
+                <li key={i}>{m.text} (score: {m.score})</li>
+              ))}
+            </ul>
+          </div>
+        ))}
     </div>
   );
 }
